@@ -1,0 +1,3 @@
+[submodule "clusterpedia"]
+	path = clusterpedia
+	url = https://github.com/clusterpedia-io/clusterpedia.git

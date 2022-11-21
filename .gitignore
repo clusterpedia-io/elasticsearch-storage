@@ -1,0 +1,9 @@
+/bin
+/plugins
+.idea
+
+# OSX trash
+.DS_Storage
+
+# apiserver local up cert trash
+apiserver.local.config
