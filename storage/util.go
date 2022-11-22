@@ -3,80 +3,125 @@ package esstorage
 import (
 	"context"
 	"fmt"
-	internal "github.com/clusterpedia-io/api/clusterpedia"
-	"github.com/elastic/go-elasticsearch/v8"
-	"github.com/elastic/go-elasticsearch/v8/esapi"
-	"k8s.io/klog/v2"
 	"strconv"
 	"strings"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/selection"
+	"k8s.io/apimachinery/pkg/util/validation/field"
+	"k8s.io/klog/v2"
+
+	internal "github.com/clusterpedia-io/api/clusterpedia"
+	"github.com/clusterpedia-io/clusterpedia/pkg/storage/internalstorage"
+	"github.com/elastic/go-elasticsearch/v8"
+	"github.com/elastic/go-elasticsearch/v8/esapi"
 )
 
 func (s *ResourceStorage) genListQuery(ownerIds []string, opts *internal.ListOptions) (map[string]interface{}, error) {
-	esQueryItems := newESQueryExpressionList()
+	builder := &QueryBuilder{}
 	if opts.ClusterNames != nil {
-		queryItem := newESQueryExpression(ClusterNamePath, opts.ClusterNames)
-		esQueryItems = append(esQueryItems, queryItem)
+		queryItem := NewTerms("object.metadata.annotations.shadow.clusterpedia.io/cluster-name", opts.ClusterNames)
+		builder.addExpression(queryItem)
 	}
 	if opts.Namespaces != nil {
-		queryItem := newESQueryExpression(NamespacesPath, opts.Namespaces)
-		esQueryItems = append(esQueryItems, queryItem)
+		queryItem := NewTerms("namespaces", opts.Namespaces)
+		builder.addExpression(queryItem)
 	}
 	if opts.Names != nil {
-		queryItem := newESQueryExpression(NamePath, opts.Names)
-		esQueryItems = append(esQueryItems, queryItem)
+		queryItem := NewTerms("name", opts.Names)
+		builder.addExpression(queryItem)
 	}
 
-	//if opts.Since != nil && opts.Before != nil {
-	//	TimeSet := []*metav1.Time{opts.Since, opts.Before}
-	//	queryItem := newESQueryExpression(TimestampPath, TimeSet)
-	//	queryItem.rangeFlag = true
-	//	esQueryItems = append(esQueryItems, queryItem)
-	//}
+	if opts.Since != nil || opts.Before != nil {
+		queryItem := &RangeExpression{}
+		queryItem = NewRange("object.metadata.creationTimestamp", opts.Since, opts.Before)
+		builder.addExpression(queryItem)
+	}
 
-	// raw sql query
-
-	// LabelSelector query
 	if opts.LabelSelector != nil {
 		if requirements, selectable := opts.LabelSelector.Requirements(); selectable {
 			for _, requirement := range requirements {
-				queryItem := labelQuery(requirement, false)
-				esQueryItems = append(esQueryItems, queryItem)
+				values := requirement.Values().List()
+				queryItem := NewTerms("object.metadata.labels", values)
+				switch requirement.Operator() {
+				case selection.Exists, selection.DoesNotExist, selection.Equals, selection.DoubleEquals:
+					builder.addExpression(queryItem)
+				case selection.NotEquals, selection.NotIn:
+					queryItem.SetLogicType(MustNot)
+					builder.addExpression(queryItem)
+				default:
+					continue
+				}
 			}
 		}
 	}
 
-	// ExtraLabelSelector query
 	if opts.ExtraLabelSelector != nil {
 		if requirements, selectable := opts.ExtraLabelSelector.Requirements(); selectable {
 			for _, requirement := range requirements {
-				queryItem := labelQuery(requirement, true)
-				esQueryItems = append(esQueryItems, queryItem)
+				switch requirement.Key() {
+				case internalstorage.SearchLabelFuzzyName:
+					for _, name := range requirement.Values().List() {
+						name = strings.TrimSpace(name)
+						values := []string{name}
+						queryItem := NewFuzzy("name", values)
+						builder.addExpression(queryItem)
+					}
+				}
 			}
 		}
 	}
 
-	// FieldSelector query
 	if opts.EnhancedFieldSelector != nil {
 		if requirements, selectable := opts.EnhancedFieldSelector.Requirements(); selectable {
 			for _, requirement := range requirements {
-				queryItem, err := fieldQuery(requirement)
-				if err != nil {
-					return nil, err
+				var (
+					fields      []string
+					fieldErrors field.ErrorList
+				)
+				for _, f := range requirement.Fields() {
+					if f.IsList() {
+						fieldErrors = append(fieldErrors, field.Invalid(f.Path(), f.Name(), fmt.Sprintf("Storage<%s>: Not Support list field", StorageName)))
+						continue
+					}
+					fields = append(fields, f.Name())
 				}
-				esQueryItems = append(esQueryItems, queryItem)
+				if len(fieldErrors) != 0 {
+					return nil, apierrors.NewInvalid(schema.GroupKind{Group: internal.GroupName, Kind: "ListOptions"}, "fieldSelector", fieldErrors)
+				}
+				fields = append(fields, "")
+				copy(fields[1:], fields[0:])
+				fields[0] = "object"
+				path := strings.Join(fields, ".")
+				values := requirement.Values().List()
+				switch requirement.Operator() {
+				case selection.Exists, selection.DoesNotExist, selection.Equals, selection.DoubleEquals:
+					queryItem := NewTerms(path, values)
+					builder.addExpression(queryItem)
+				case selection.NotEquals, selection.NotIn:
+					queryItem := NewTerms(path, values)
+					queryItem.SetLogicType(MustNot)
+					builder.addExpression(queryItem)
+				default:
+					return nil, nil
+				}
+
 			}
 		}
 	}
 
-	// OwnerReference query
 	if len(opts.ClusterNames) == 1 && (len(opts.OwnerUID) != 0 || len(opts.OwnerName) != 0) {
-		queryItem := newESQueryExpression(UIDPath, ownerIds)
-		esQueryItems = append(esQueryItems, queryItem)
+		queryItem := NewTerms("object.metadata.ownerReferences.uid", ownerIds)
+		builder.addExpression(queryItem)
 	}
 
-	esQueryItems = append(esQueryItems, newESQueryExpression(GroupPath, s.storageVersion.Group))
-	esQueryItems = append(esQueryItems, newESQueryExpression(VersionPath, s.storageVersion.Version))
-	esQueryItems = append(esQueryItems, newESQueryExpression(ResourcePath, s.storageGroupResource.Resource))
+	groupItem := NewTerms("group", []string{s.storageVersion.Group})
+	builder.addExpression(groupItem)
+	versionItem := NewTerms("version", []string{s.storageVersion.Version})
+	builder.addExpression(versionItem)
+	resourceItem := NewTerms("resource", []string{s.storageGroupResource.Resource})
+	builder.addExpression(resourceItem)
 
 	size := 500
 	if opts.Limit != -1 {
@@ -90,10 +135,10 @@ func (s *ResourceStorage) genListQuery(ownerIds []string, opts *internal.ListOpt
 			//TODO add sort
 		}
 	}
+	builder.size = size
+	builder.from = offset
 
-	query := Build(esQueryItems, size, offset)
-
-	return query, nil
+	return builder.builder(), nil
 }
 
 func EnsureIndex(client *elasticsearch.Client, mapping string, indexName string) error {
