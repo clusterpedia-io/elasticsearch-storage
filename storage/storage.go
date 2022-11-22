@@ -33,7 +33,7 @@ func (s *StorageFactory) NewResourceStorage(config *storage.ResourceStorageConfi
 	// indexAlias: ${prefix}-${group}-${resource}
 	storage.indexName = generateIndexName(config.StorageGroupResource.Group, config.StorageGroupResource.Resource)
 	var mapping = GetIndexMapping(s.indexAlias, config.GroupResource)
-	err := EnsureIndex(s.index.client, mapping, storage.indexName)
+	err := ensureIndex(s.index.client, mapping, storage.indexName)
 	if err != nil {
 		return nil, err
 	}
@@ -53,16 +53,10 @@ func (s *StorageFactory) NewCollectionResourceStorage(cr *internal.CollectionRes
 
 func (s *StorageFactory) GetResourceVersions(ctx context.Context, cluster string) (map[schema.GroupVersionResource]map[string]interface{}, error) {
 	resourceVersions := make(map[schema.GroupVersionResource]map[string]interface{})
-	query := map[string]interface{}{
-		"_source": []string{"group", "version", "resource", "namespace", "name", "resourceVersion"},
-		"query": map[string]interface{}{
-			"term": map[string]interface{}{
-				"object.metadata.annotations.shadow.clusterpedia.io/cluster-name": cluster,
-			},
-		},
-	}
-	resps, err := s.index.SearchAll(ctx, query, []string{s.indexAlias})
-
+	builder := NewQueryBuilder()
+	builder.source = []string{"group", "version", "resource", "namespace", "name", "resourceVersion"}
+	builder.addExpression(NewTerms(ClusterPath, []string{cluster}))
+	resps, err := s.index.SearchAll(ctx, builder.build(), []string{s.indexAlias})
 	if err != nil {
 		esError, ok := err.(*ESError)
 		if ok && esError.StatusCode == 404 {
@@ -91,17 +85,12 @@ func (s *StorageFactory) GetResourceVersions(ctx context.Context, cluster string
 
 func (s *StorageFactory) CleanCluster(ctx context.Context, cluster string) error {
 	var buf bytes.Buffer
-	query := map[string]interface{}{
-		"query": map[string]interface{}{
-			"match": map[string]interface{}{
-				"object.metadata.annotations.shadow.clusterpedia.io/cluster-name": cluster,
-			},
-		},
-	}
+	builder := NewQueryBuilder()
+	builder.addExpression(NewTerms(ClusterPath, []string{cluster}))
+	query := builder.build()
 	if err := json.NewEncoder(&buf).Encode(query); err != nil {
 		return fmt.Errorf("error encoding query: %s", err)
 	}
-
 	indexNames, err := s.index.ListIndex()
 	if err != nil {
 		return err
@@ -120,36 +109,13 @@ func (s *StorageFactory) CleanCluster(ctx context.Context, cluster string) error
 }
 
 func (s *StorageFactory) CleanClusterResource(ctx context.Context, cluster string, gvr schema.GroupVersionResource) error {
-	query := map[string]interface{}{
-		"query": map[string]interface{}{
-			"bool": map[string]interface{}{
-				"must": []map[string]interface{}{
-					{
-						"match": map[string]interface{}{
-							"group": gvr.Group,
-						},
-					},
-					{
-						"match": map[string]interface{}{
-							"version": gvr.Version,
-						},
-					},
-					{
-						"match": map[string]interface{}{
-							"resource": gvr.Resource,
-						},
-					},
-					{
-						"match": map[string]interface{}{
-							"object.metadata.annotations.shadow.clusterpedia.io/cluster-name": cluster,
-						},
-					},
-				},
-			},
-		},
-	}
+	builder := NewQueryBuilder()
+	builder.addExpression(NewTerms(GroupPath, []string{gvr.Group}))
+	builder.addExpression(NewTerms(VersionPath, []string{gvr.Version}))
+	builder.addExpression(NewTerms(ResourcePath, []string{gvr.Resource}))
+	builder.addExpression(NewTerms(ClusterPath, []string{cluster}))
 	indexName := generateIndexName(gvr.Group, gvr.Resource)
-	err := s.index.DeleteByQuery(ctx, query, indexName)
+	err := s.index.DeleteByQuery(ctx, builder.build(), indexName)
 	if err != nil {
 		return err
 	}

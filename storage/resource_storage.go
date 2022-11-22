@@ -27,10 +27,6 @@ var (
 	supportedOrderByFields = sets.NewString("cluster", "namespace", "name", "created_at", "resource_version")
 )
 
-type CriteriaType int
-
-type Operator int
-
 type ResourceStorage struct {
 	client *elasticsearch.Client
 	codec  runtime.Codec
@@ -45,13 +41,6 @@ type ResourceStorage struct {
 	extractConfig []string
 
 	index *Index
-}
-
-type QueryItem struct {
-	criteriaType CriteriaType
-	operator     Operator
-	key          string
-	criteria     interface{}
 }
 
 func (s *ResourceStorage) GetStorageConfig() *storage.ResourceStorageConfig {
@@ -175,69 +164,33 @@ func (s *ResourceStorage) GetOwnerIds(ctx context.Context, opts *internal.ListOp
 }
 
 func (s *ResourceStorage) getUIDsByName(ctx context.Context, opts *internal.ListOptions) ([]string, error) {
-	cluster := opts.ClusterNames[0]
-	var quayIts []*QueryItem
+	builder := NewQueryBuilder()
+	builder.size = 500
+	builder.source = []string{UIDPath}
+
 	if len(opts.Namespaces) != 0 {
-		filter := &QueryItem{
-			key:      "namespace",
-			criteria: opts.Namespaces,
-		}
-		quayIts = append(quayIts, filter)
+		builder.addExpression(NewTerms(NameSpacePath, opts.Namespaces))
 	}
+
 	if !opts.OwnerGroupResource.Empty() {
 		groupResource := opts.OwnerGroupResource
-		groupFilter := &QueryItem{
-			key:      "group",
-			criteria: groupResource.Group,
-		}
-		resourceFilter := &QueryItem{
-			key:      "resource",
-			criteria: groupResource.Resource,
-		}
-		quayIts = append(quayIts, groupFilter, resourceFilter)
+		builder.addExpression(NewTerms(GroupPath, []string{groupResource.Group}))
+		builder.addExpression(NewTerms(ResourcePath, []string{groupResource.Resource}))
 	}
-	filter := &QueryItem{
-		key:      "name",
-		criteria: opts.OwnerName,
-	}
-	quayIts = append(quayIts, filter)
-	filter = &QueryItem{
-		key:      "object.metadata.annotations.shadow.clusterpedia.io/cluster-name",
-		criteria: cluster,
-	}
-	quayIts = append(quayIts, filter)
 
-	var mustFilters []map[string]interface{}
-	for i := range quayIts {
-		var word string
-		if _, ok := quayIts[i].criteria.([]string); ok {
-			word = "terms"
-		} else {
-			word = "term"
-		}
-		criteria := map[string]interface{}{
-			word: map[string]interface{}{
-				quayIts[i].key: quayIts[i].criteria,
-			},
-		}
-		mustFilters = append(mustFilters, criteria)
-	}
-	query := map[string]interface{}{
-		"size":    500,
-		"_source": []string{"object.metadata.uid"},
-		"query": map[string]interface{}{
-			"bool": map[string]interface{}{
-				"must": mustFilters,
-			},
-		},
-	}
-	r, err := s.index.Search(ctx, query, []string{s.resourceAlias})
+	builder.addExpression(NewTerms(NamePath, []string{opts.OwnerName}))
+
+	cluster := opts.ClusterNames[0]
+	builder.addExpression(NewTerms(ClusterPath, []string{cluster}))
+
+	r, err := s.index.Search(ctx, builder.build(), []string{s.resourceAlias})
 	if err != nil {
 		return nil, err
 	}
+
 	var uids []string
 	for _, resource := range r.GetResources() {
-		uid := SimpleMapExtract("metadata.uid", resource.GetObject())
+		uid := simpleMapExtract("metadata.uid", resource.GetObject())
 		if uid == nil {
 			return nil, fmt.Errorf("error")
 		}
@@ -250,34 +203,19 @@ func (s *ResourceStorage) getUIDs(ctx context.Context, cluster string, uids []st
 	if seniority == 0 {
 		return uids, nil
 	}
-	query := map[string]interface{}{
-		"size":    500,
-		"_source": []string{"object.metadata.uid"},
-		"query": map[string]interface{}{
-			"bool": map[string]interface{}{
-				"must": []map[string]interface{}{
-					{
-						"terms": map[string]interface{}{
-							"object.metadata.ownerReferences.uid": uids,
-						},
-					},
-					{
-						"term": map[string]interface{}{
-							"object.metadata.annotations.shadow.clusterpedia.io/cluster-name": cluster,
-						},
-					},
-				},
-			},
-		},
-	}
+	builder := NewQueryBuilder()
+	builder.size = 500
+	builder.source = []string{UIDPath}
+	builder.addExpression(NewTerms(OwnerReferencePath, uids))
+	builder.addExpression(NewTerms(ClusterPath, []string{cluster}))
 
-	r, err := s.index.Search(ctx, query, []string{s.resourceAlias})
+	r, err := s.index.Search(ctx, builder.build(), []string{s.resourceAlias})
 	if err != nil {
 		return nil, err
 	}
 	uids = []string{}
 	for _, resource := range r.GetResources() {
-		result := SimpleMapExtract("metadata.uid", resource.GetObject())
+		result := simpleMapExtract("metadata.uid", resource.GetObject())
 		if result == nil {
 			return nil, fmt.Errorf("extract uid failure, targetObject is %v", resource.GetObject())
 		}
@@ -291,45 +229,15 @@ func (s *ResourceStorage) getUIDs(ctx context.Context, cluster string, uids []st
 }
 
 func (s *ResourceStorage) Get(ctx context.Context, cluster, namespace, name string, into runtime.Object) error {
-	query := map[string]interface{}{
-		"query": map[string]interface{}{
-			"bool": map[string]interface{}{
-				"must": []map[string]interface{}{
-					{
-						"term": map[string]interface{}{
-							"group": s.storageGroupResource.Group,
-						},
-					},
-					{
-						"term": map[string]interface{}{
-							"version": s.storageVersion.Version,
-						},
-					},
-					{
-						"term": map[string]interface{}{
-							"resource": s.storageGroupResource.Resource,
-						},
-					},
-					{
-						"term": map[string]interface{}{
-							"object.metadata.name": name,
-						},
-					},
-					{
-						"term": map[string]interface{}{
-							"object.metadata.namespace": namespace,
-						},
-					},
-					{
-						"term": map[string]interface{}{
-							"object.metadata.annotations.shadow.clusterpedia.io/cluster-name": cluster,
-						},
-					},
-				},
-			},
-		},
-	}
-	r, err := s.index.Search(ctx, query, []string{s.indexName})
+	builder := NewQueryBuilder()
+	builder.addExpression(NewTerms(GroupPath, []string{s.storageGroupResource.Group}))
+	builder.addExpression(NewTerms(VersionPath, []string{s.storageVersion.Version}))
+	builder.addExpression(NewTerms(ResourcePath, []string{s.storageGroupResource.Resource}))
+	builder.addExpression(NewTerms(NamePath, []string{name}))
+	builder.addExpression(NewTerms(NameSpacePath, []string{namespace}))
+	builder.addExpression(NewTerms(ClusterPath, []string{cluster}))
+
+	r, err := s.index.Search(ctx, builder.build(), []string{s.indexName})
 	if err != nil {
 		return err
 	}
@@ -358,8 +266,8 @@ func (s *ResourceStorage) Delete(ctx context.Context, cluster string, obj runtim
 	if err != nil {
 		return err
 	}
+	//dirty data will cause errors
 	if len(metaobj.GetUID()) == 0 {
-		//TODO 会有一些脏数据存入es 导致后面删除报错
 		return nil
 	}
 	err = s.index.DeleteById(ctx, string(metaobj.GetUID()), s.indexName)
@@ -378,7 +286,7 @@ func (s *ResourceStorage) upsert(ctx context.Context, cluster string, obj runtim
 	if gvk.Kind == "" {
 		return fmt.Errorf("%s: kind is required", gvk)
 	}
-	metaobj, err := meta.Accessor(obj)
+	metaObj, err := meta.Accessor(obj)
 	if err != nil {
 		return err
 	}
@@ -386,7 +294,7 @@ func (s *ResourceStorage) upsert(ctx context.Context, cluster string, obj runtim
 	custom := make(map[string]string)
 	if unstructured, ok := obj.(*unstructured.Unstructured); ok && len(s.extractConfig) > 0 {
 		for _, path := range s.extractConfig {
-			result := SimpleMapExtract(path, unstructured.Object)
+			result := simpleMapExtract(path, unstructured.Object)
 			if result != nil {
 				value, err := json.Marshal(result)
 				if err == nil {
@@ -396,8 +304,8 @@ func (s *ResourceStorage) upsert(ctx context.Context, cluster string, obj runtim
 		}
 	}
 
-	resource := s.genDocument(metaobj, gvk, custom)
-	err = s.index.Upsert(ctx, s.indexName, string(metaobj.GetUID()), resource)
+	resource := s.genDocument(metaObj, gvk, custom)
+	err = s.index.Upsert(ctx, s.indexName, string(metaObj.GetUID()), resource)
 	if err != nil {
 		return err
 	}

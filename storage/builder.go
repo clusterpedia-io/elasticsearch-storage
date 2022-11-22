@@ -2,6 +2,8 @@ package esstorage
 
 import v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+type LogicType int
+
 const (
 	Must = iota
 	MustNot
@@ -13,8 +15,6 @@ type Expression interface {
 	ToMap() map[string]interface{}
 	LogicType() LogicType
 }
-
-type LogicType int
 
 type Basic struct {
 	logicType LogicType
@@ -35,11 +35,18 @@ type QueryBuilder struct {
 	expressions []Expression
 }
 
+func NewQueryBuilder() *QueryBuilder {
+	return &QueryBuilder{
+		size: -1,
+		from: -1,
+	}
+}
+
 func (q *QueryBuilder) addExpression(exp Expression) {
 	q.expressions = append(q.expressions, exp)
 }
 
-func (q *QueryBuilder) builder() map[string]interface{} {
+func (q *QueryBuilder) build() map[string]interface{} {
 	var mustFilter, mustNotFilter []map[string]interface{}
 	for i := range q.expressions {
 		if q.expressions[i].LogicType() == Must {
@@ -49,15 +56,23 @@ func (q *QueryBuilder) builder() map[string]interface{} {
 		}
 	}
 
+	bool := map[string]interface{}{}
+	if len(mustFilter) > 0 {
+		bool["must"] = mustFilter
+	}
+	if len(mustNotFilter) > 0 {
+		bool["must_not"] = mustNotFilter
+	}
 	query := map[string]interface{}{
-		"size": q.size,
-		"from": q.from,
 		"query": map[string]interface{}{
-			"bool": map[string]interface{}{
-				"must":     mustFilter,
-				"must_not": mustNotFilter,
-			},
+			"bool": bool,
 		},
+	}
+	if q.size >= 0 {
+		query["size"] = q.size
+	}
+	if q.from >= 0 {
+		query["from"] = q.from
 	}
 	if len(q.source) > 0 {
 		query["_source"] = q.source

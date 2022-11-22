@@ -25,9 +25,7 @@ func NewStorageFactory(configPath string) (storage.StorageFactory, error) {
 
 	return &StorageFactory{
 		indexAlias: "clusterpedia-resource",
-		index: &Index{
-			client: initESClient(cfg),
-		},
+		index:      NewIndex(initESClient(cfg)),
 	}, nil
 }
 

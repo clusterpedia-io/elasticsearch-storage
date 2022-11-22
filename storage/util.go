@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/elastic/go-elasticsearch/v8"
+	"github.com/elastic/go-elasticsearch/v8/esapi"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/selection"
@@ -14,28 +16,26 @@ import (
 
 	internal "github.com/clusterpedia-io/api/clusterpedia"
 	"github.com/clusterpedia-io/clusterpedia/pkg/storage/internalstorage"
-	"github.com/elastic/go-elasticsearch/v8"
-	"github.com/elastic/go-elasticsearch/v8/esapi"
 )
 
 func (s *ResourceStorage) genListQuery(ownerIds []string, opts *internal.ListOptions) (map[string]interface{}, error) {
 	builder := &QueryBuilder{}
 	if opts.ClusterNames != nil {
-		queryItem := NewTerms("object.metadata.annotations.shadow.clusterpedia.io/cluster-name", opts.ClusterNames)
+		queryItem := NewTerms(ClusterPath, opts.ClusterNames)
 		builder.addExpression(queryItem)
 	}
 	if opts.Namespaces != nil {
-		queryItem := NewTerms("namespaces", opts.Namespaces)
+		queryItem := NewTerms(NameSpacePath, opts.Namespaces)
 		builder.addExpression(queryItem)
 	}
 	if opts.Names != nil {
-		queryItem := NewTerms("name", opts.Names)
+		queryItem := NewTerms(NamePath, opts.Names)
 		builder.addExpression(queryItem)
 	}
 
 	if opts.Since != nil || opts.Before != nil {
 		queryItem := &RangeExpression{}
-		queryItem = NewRange("object.metadata.creationTimestamp", opts.Since, opts.Before)
+		queryItem = NewRange(CreationTimestampPath, opts.Since, opts.Before)
 		builder.addExpression(queryItem)
 	}
 
@@ -43,7 +43,7 @@ func (s *ResourceStorage) genListQuery(ownerIds []string, opts *internal.ListOpt
 		if requirements, selectable := opts.LabelSelector.Requirements(); selectable {
 			for _, requirement := range requirements {
 				values := requirement.Values().List()
-				queryItem := NewTerms("object.metadata.labels", values)
+				queryItem := NewTerms(LabelPath, values)
 				switch requirement.Operator() {
 				case selection.Exists, selection.DoesNotExist, selection.Equals, selection.DoubleEquals:
 					builder.addExpression(queryItem)
@@ -112,15 +112,15 @@ func (s *ResourceStorage) genListQuery(ownerIds []string, opts *internal.ListOpt
 	}
 
 	if len(opts.ClusterNames) == 1 && (len(opts.OwnerUID) != 0 || len(opts.OwnerName) != 0) {
-		queryItem := NewTerms("object.metadata.ownerReferences.uid", ownerIds)
+		queryItem := NewTerms(OwnerReferencePath, ownerIds)
 		builder.addExpression(queryItem)
 	}
 
-	groupItem := NewTerms("group", []string{s.storageVersion.Group})
+	groupItem := NewTerms(GroupPath, []string{s.storageVersion.Group})
 	builder.addExpression(groupItem)
-	versionItem := NewTerms("version", []string{s.storageVersion.Version})
+	versionItem := NewTerms(VersionPath, []string{s.storageVersion.Version})
 	builder.addExpression(versionItem)
-	resourceItem := NewTerms("resource", []string{s.storageGroupResource.Resource})
+	resourceItem := NewTerms(ResourcePath, []string{s.storageGroupResource.Resource})
 	builder.addExpression(resourceItem)
 
 	size := 500
@@ -138,10 +138,10 @@ func (s *ResourceStorage) genListQuery(ownerIds []string, opts *internal.ListOpt
 	builder.size = size
 	builder.from = offset
 
-	return builder.builder(), nil
+	return builder.build(), nil
 }
 
-func EnsureIndex(client *elasticsearch.Client, mapping string, indexName string) error {
+func ensureIndex(client *elasticsearch.Client, mapping string, indexName string) error {
 	req := esapi.IndicesCreateRequest{
 		Index: indexName,
 		Body:  strings.NewReader(mapping),
@@ -162,7 +162,7 @@ func EnsureIndex(client *elasticsearch.Client, mapping string, indexName string)
 	return nil
 }
 
-func SimpleMapExtract(path string, object map[string]interface{}) interface{} {
+func simpleMapExtract(path string, object map[string]interface{}) interface{} {
 	fields := strings.Split(path, ".")
 	var cur interface{}
 	cur = object
