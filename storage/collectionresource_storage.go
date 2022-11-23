@@ -32,23 +32,29 @@ func NewCollectionResourceStorage(client *elasticsearch.Client, indexName string
 func (s *CollectionResourceStorage) Get(ctx context.Context, opts *internal.ListOptions) (*internal.CollectionResource, error) {
 	builder := NewQueryBuilder()
 	for _, rt := range s.collectionResource.ResourceTypes {
-		groupTerm := NewTerms(GroupPath, []string{rt.Group})
-		groupTerm.SetLogicType(Should)
-		builder.addExpression(groupTerm)
+		bool := NewBoolExpression()
+		bool.SetLogicType(Should)
+		bool.addExpression(NewTerms(GroupPath, []string{rt.Group}))
 
 		if len(rt.Resource) > 0 {
 			resourceTerm := NewTerms(ResourcePath, []string{rt.Resource})
-			resourceTerm.SetLogicType(Should)
-			builder.addExpression(resourceTerm)
+			bool.addExpression(resourceTerm)
 		}
 
 		if len(rt.Version) > 0 {
 			versionTerm := NewTerms(VersionPath, []string{rt.Version})
-			versionTerm.SetLogicType(Should)
-			builder.addExpression(versionTerm)
+			bool.addExpression(versionTerm)
 		}
+		builder.addExpression(bool)
 	}
 
+	if opts.OnlyMetadata == true {
+		builder.source = []string{
+			ApiVersionPath,
+			KindPath,
+			ObjectMetaPath,
+		}
+	}
 	err := applyListOptionToQueryBuilder(builder, opts)
 	if err != nil {
 		return nil, err
@@ -58,11 +64,10 @@ func (s *CollectionResourceStorage) Get(ctx context.Context, opts *internal.List
 	if err != nil {
 		return nil, err
 	}
-	objects := make([]runtime.Object, len(r.GetResources()))
+	objects := make([]runtime.Object, 0, len(r.GetResources()))
 	collection := &internal.CollectionResource{
 		TypeMeta:   s.collectionResource.TypeMeta,
 		ObjectMeta: s.collectionResource.ObjectMeta,
-		Items:      make([]runtime.Object, 0, len(r.GetResources())),
 	}
 	for _, item := range r.GetResources() {
 		object := item.Object

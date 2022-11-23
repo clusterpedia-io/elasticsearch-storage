@@ -31,10 +31,10 @@ func (b *Basic) SetLogicType(t LogicType) {
 }
 
 type QueryBuilder struct {
-	size        int
-	from        int
-	source      []string
-	expressions []Expression
+	size    int
+	from    int
+	source  []string
+	boolExp BoolExpression
 }
 
 func NewQueryBuilder() *QueryBuilder {
@@ -45,45 +45,12 @@ func NewQueryBuilder() *QueryBuilder {
 }
 
 func (q *QueryBuilder) addExpression(exp Expression) {
-	q.expressions = append(q.expressions, exp)
+	q.boolExp.addExpression(exp)
 }
 
 func (q *QueryBuilder) build() map[string]interface{} {
-	var mustFilter, mustNotFilter, shouldFilter []map[string]interface{}
-	for i := range q.expressions {
-		if q.expressions[i].LogicType() == Must {
-			mustFilter = append(mustFilter, q.expressions[i].ToMap())
-		} else {
-			mustNotFilter = append(mustNotFilter, q.expressions[i].ToMap())
-		}
-		switch q.expressions[i].LogicType() {
-		case Must:
-			mustFilter = append(mustFilter, q.expressions[i].ToMap())
-		case MustNot:
-			mustFilter = append(mustNotFilter, q.expressions[i].ToMap())
-		case Should:
-			shouldFilter = append(shouldFilter, q.expressions[i].ToMap())
-		default:
-			klog.Warning("unknown logictype %d", q.expressions[i].LogicType())
-		}
-
-	}
-
-	bool := map[string]interface{}{}
-	if len(mustFilter) > 0 {
-		bool["must"] = mustFilter
-	}
-	if len(mustNotFilter) > 0 {
-		bool["must_not"] = mustNotFilter
-	}
-	if len(shouldFilter) > 0 {
-		bool["should"] = shouldFilter
-	}
-
 	query := map[string]interface{}{
-		"query": map[string]interface{}{
-			"bool": bool,
-		},
+		"query": q.boolExp.ToMap(),
 	}
 	if q.size >= 0 {
 		query["size"] = q.size
@@ -180,5 +147,49 @@ func (t *ExistExpression) ToMap() map[string]interface{} {
 		"exist": map[string]interface{}{
 			t.path: "",
 		},
+	}
+}
+
+type BoolExpression struct {
+	Basic
+	expressions []Expression
+}
+
+func NewBoolExpression() *BoolExpression {
+	return &BoolExpression{
+		expressions: make([]Expression, 0, 5),
+	}
+}
+
+func (b *BoolExpression) addExpression(exp Expression) {
+	b.expressions = append(b.expressions, exp)
+}
+
+func (b *BoolExpression) ToMap() map[string]interface{} {
+	var mustFilter, mustNotFilter, shouldFilter []map[string]interface{}
+	for i := range b.expressions {
+		switch b.expressions[i].LogicType() {
+		case Must:
+			mustFilter = append(mustFilter, b.expressions[i].ToMap())
+		case MustNot:
+			mustNotFilter = append(mustNotFilter, b.expressions[i].ToMap())
+		case Should:
+			shouldFilter = append(shouldFilter, b.expressions[i].ToMap())
+		default:
+			klog.Warning("unknown logictype %d", b.expressions[i].LogicType())
+		}
+	}
+	bool := map[string]interface{}{}
+	if len(mustFilter) > 0 {
+		bool["must"] = mustFilter
+	}
+	if len(mustNotFilter) > 0 {
+		bool["must_not"] = mustNotFilter
+	}
+	if len(shouldFilter) > 0 {
+		bool["should"] = shouldFilter
+	}
+	return map[string]interface{}{
+		"bool": bool,
 	}
 }

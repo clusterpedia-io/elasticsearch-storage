@@ -106,7 +106,7 @@ func applyListOptionToQueryBuilder(builder *QueryBuilder, opts *internal.ListOpt
 	}
 
 	size := 500
-	if opts.Limit != -1 {
+	if opts.Limit > 0 {
 		size = int(opts.Limit)
 	}
 	offset, _ := strconv.Atoi(opts.Continue)

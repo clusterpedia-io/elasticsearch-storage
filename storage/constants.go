@@ -11,4 +11,7 @@ const (
 	UIDPath               = "object.metadata.uid"
 	NameSpacePath         = "namespace"
 	NamePath              = "name"
+	ApiVersionPath        = "object.apiVersion"
+	KindPath              = "object.kind"
+	ObjectMetaPath        = "object.metadata"
 )
