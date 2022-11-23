@@ -1,6 +1,9 @@
 package esstorage
 
-import v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+import (
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/klog/v2"
+)
 
 type LogicType int
 
@@ -8,7 +11,6 @@ const (
 	Must = iota
 	MustNot
 	Should
-	ShouldNot
 )
 
 type Expression interface {
@@ -47,13 +49,24 @@ func (q *QueryBuilder) addExpression(exp Expression) {
 }
 
 func (q *QueryBuilder) build() map[string]interface{} {
-	var mustFilter, mustNotFilter []map[string]interface{}
+	var mustFilter, mustNotFilter, shouldFilter []map[string]interface{}
 	for i := range q.expressions {
 		if q.expressions[i].LogicType() == Must {
 			mustFilter = append(mustFilter, q.expressions[i].ToMap())
 		} else {
 			mustNotFilter = append(mustNotFilter, q.expressions[i].ToMap())
 		}
+		switch q.expressions[i].LogicType() {
+		case Must:
+			mustFilter = append(mustFilter, q.expressions[i].ToMap())
+		case MustNot:
+			mustFilter = append(mustNotFilter, q.expressions[i].ToMap())
+		case Should:
+			shouldFilter = append(shouldFilter, q.expressions[i].ToMap())
+		default:
+			klog.Warning("unknown logictype %d", q.expressions[i].LogicType())
+		}
+
 	}
 
 	bool := map[string]interface{}{}
@@ -63,6 +76,10 @@ func (q *QueryBuilder) build() map[string]interface{} {
 	if len(mustNotFilter) > 0 {
 		bool["must_not"] = mustNotFilter
 	}
+	if len(shouldFilter) > 0 {
+		bool["should"] = shouldFilter
+	}
+
 	query := map[string]interface{}{
 		"query": map[string]interface{}{
 			"bool": bool,

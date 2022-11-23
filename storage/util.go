@@ -18,8 +18,7 @@ import (
 	"github.com/clusterpedia-io/clusterpedia/pkg/storage/internalstorage"
 )
 
-func (s *ResourceStorage) genListQuery(ownerIds []string, opts *internal.ListOptions) (map[string]interface{}, error) {
-	builder := &QueryBuilder{}
+func applyListOptionToQueryBuilder(builder *QueryBuilder, opts *internal.ListOptions) error {
 	if opts.ClusterNames != nil {
 		queryItem := NewTerms(ClusterPath, opts.ClusterNames)
 		builder.addExpression(queryItem)
@@ -50,8 +49,6 @@ func (s *ResourceStorage) genListQuery(ownerIds []string, opts *internal.ListOpt
 				case selection.NotEquals, selection.NotIn:
 					queryItem.SetLogicType(MustNot)
 					builder.addExpression(queryItem)
-				default:
-					continue
 				}
 			}
 		}
@@ -88,7 +85,7 @@ func (s *ResourceStorage) genListQuery(ownerIds []string, opts *internal.ListOpt
 					fields = append(fields, f.Name())
 				}
 				if len(fieldErrors) != 0 {
-					return nil, apierrors.NewInvalid(schema.GroupKind{Group: internal.GroupName, Kind: "ListOptions"}, "fieldSelector", fieldErrors)
+					return apierrors.NewInvalid(schema.GroupKind{Group: internal.GroupName, Kind: "ListOptions"}, "fieldSelector", fieldErrors)
 				}
 				fields = append(fields, "")
 				copy(fields[1:], fields[0:])
@@ -103,25 +100,10 @@ func (s *ResourceStorage) genListQuery(ownerIds []string, opts *internal.ListOpt
 					queryItem := NewTerms(path, values)
 					queryItem.SetLogicType(MustNot)
 					builder.addExpression(queryItem)
-				default:
-					return nil, nil
 				}
-
 			}
 		}
 	}
-
-	if len(opts.ClusterNames) == 1 && (len(opts.OwnerUID) != 0 || len(opts.OwnerName) != 0) {
-		queryItem := NewTerms(OwnerReferencePath, ownerIds)
-		builder.addExpression(queryItem)
-	}
-
-	groupItem := NewTerms(GroupPath, []string{s.storageVersion.Group})
-	builder.addExpression(groupItem)
-	versionItem := NewTerms(VersionPath, []string{s.storageVersion.Version})
-	builder.addExpression(versionItem)
-	resourceItem := NewTerms(ResourcePath, []string{s.storageGroupResource.Resource})
-	builder.addExpression(resourceItem)
 
 	size := 500
 	if opts.Limit != -1 {
@@ -137,7 +119,28 @@ func (s *ResourceStorage) genListQuery(ownerIds []string, opts *internal.ListOpt
 	}
 	builder.size = size
 	builder.from = offset
+	return nil
+}
 
+func (s *ResourceStorage) genListQuery(ownerIds []string, opts *internal.ListOptions) (map[string]interface{}, error) {
+	builder := NewQueryBuilder()
+
+	err := applyListOptionToQueryBuilder(builder, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(opts.ClusterNames) == 1 && (len(opts.OwnerUID) != 0 || len(opts.OwnerName) != 0) {
+		queryItem := NewTerms(OwnerReferencePath, ownerIds)
+		builder.addExpression(queryItem)
+	}
+
+	groupItem := NewTerms(GroupPath, []string{s.storageVersion.Group})
+	builder.addExpression(groupItem)
+	versionItem := NewTerms(VersionPath, []string{s.storageVersion.Version})
+	builder.addExpression(versionItem)
+	resourceItem := NewTerms(ResourcePath, []string{s.storageGroupResource.Resource})
+	builder.addExpression(resourceItem)
 	return builder.build(), nil
 }
 
