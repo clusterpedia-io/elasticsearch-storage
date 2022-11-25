@@ -59,7 +59,7 @@ func (s *StorageFactory) GetResourceVersions(ctx context.Context, cluster string
 	resps, err := s.index.SearchAll(ctx, builder.build(), []string{s.indexAlias})
 	if err != nil {
 		esError, ok := err.(*ESError)
-		if ok && esError.StatusCode == 404 {
+		if ok && (esError.StatusCode == 404 || esError.StatusCode == 503) {
 			return resourceVersions, nil
 		}
 		return resourceVersions, err

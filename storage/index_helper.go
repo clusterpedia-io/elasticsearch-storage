@@ -110,7 +110,8 @@ var mappingTemplate = `{
 var common = `
     "spec":{
         "type":"flattened",
-        "ignore_above": 256
+        "ignore_above": 1024,
+        "depth_limit": 200
     }	
 `
 var configmap = `
@@ -133,12 +134,13 @@ var secret = `
         "enabled":false
     }
 `
+
 var event = `
     "involvedObject": {
-        "type": "flattened",
+        "type": "flattened"
     },
     "source": {
-        "type": "flattened",
+        "type": "flattened"
     },
     "firstTimestamp": {
         "type": "date", 
@@ -150,13 +152,13 @@ var event = `
     },
     "eventTime": {
         "type": "date", 
-		"format": "yyyy-MM-dd'T'HH:mm:ss'Z'"
+		"format": "yyyy-MM-dd'T'HH:mm:ss.'Z'"
     },
     "related": {
-        "type": "flattened",
+        "type": "flattened"
     },
     "series": {
-        "type": "flattened",
+        "type": "flattened"
     }
 `
 
