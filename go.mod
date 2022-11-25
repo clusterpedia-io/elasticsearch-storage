@@ -1,4 +1,4 @@
-module github.com/clusterpedia-io/es-storage-layer
+module github.com/clusterpedia-io/elasticsearch-storage
 
 go 1.19
 

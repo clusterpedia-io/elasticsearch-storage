@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	StorageName = "es-storage-layer"
+	StorageName = "elasticsearch"
 )
 
 func RegisterStorageLayer() {

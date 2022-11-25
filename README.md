@@ -1,9 +1,9 @@
-# ES Storage Layer
-
+# Elasticsearch Storage
+The elasticsearch storage plugin enables clusterpedia to store and search data in Elasticsearch
 ## Build and Run
 `git clone` repo
 ```bash
-$ git clone --recursive https://github.com/clusterpedia-io/es-storage-layer.git
+$ git clone --recursive https://github.com/clusterpedia-io/elasticsearch-storage.git
 $ cd es-storage-layer
 ```
 
@@ -12,7 +12,7 @@ build storage layer plugin
 $ make build-plugin
 
 $ # check plugin
-$ file ./plugins/es-storage-layer.so
+$ file ./plugins/elasticsearch-storage-layer.so
 ./plugins/sample-storage-layer.so: Mach-O 64-bit dynamically linked shared library x86_64
 ```
 
@@ -30,10 +30,10 @@ drwxr-xr-x  16 icebergu  staff       512 11  7 11:15 ..
 
 run clusterpedia apiserver
 ```bash
-$ STORAGE_PLUGINS=./plugins ./bin/apiserver --storage-name=es-storage-layer --storage-config=./config.yaml <... other flags>
+$ STORAGE_PLUGINS=./plugins ./bin/apiserver --storage-name=elasticsearch --storage-config=./config.yaml <... other flags>
 ```
 
 run clusterpedia clustersynchro-manager
 ```bash
-$ STORAGE_PLUGINS=./plugins ./bin/clustersynchro-manager --storage-name=es-storage-layer --storage-config=./config.yaml <... other flags>
+$ STORAGE_PLUGINS=./plugins ./bin/clustersynchro-manager --storage-name=elasticsearch --storage-config=./config.yaml <... other flags>
 ```
