@@ -69,34 +69,17 @@ var mappingTemplate = `{
                 "type": "flattened"
               },
               "name": {
-                "type": "text",
-                "fields": {
-                  "keyword": {
-                    "type": "keyword",
-                    "ignore_above": 256
-                  }
-                }
+                "type": "keyword"
               },
               "namespace": {
-                "type": "text",
-                "fields": {
-                  "keyword": {
-                    "type": "keyword",
-                    "ignore_above": 256
-                  }
-                }
+                "type": "keyword"
               },
               "ownerReferences": {
                 "type": "flattened"
               },
               "resourceVersion": {
-                "type": "text",
-                "fields": {
-                  "keyword": {
-                    "type": "keyword",
-                    "ignore_above": 256
-                  }
-                }
+                "type": "keyword",
+                "ignore_above": 256
               }
             }
           },
