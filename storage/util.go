@@ -111,12 +111,12 @@ func applyListOptionToQueryBuilder(builder *QueryBuilder, opts *internal.ListOpt
 	}
 	offset, _ := strconv.Atoi(opts.Continue)
 
+	var sort []map[string]interface{}
 	for _, orderby := range opts.OrderBy {
-		field := orderby.Field
-		if supportedOrderByFields.Has(field) {
-			//TODO add sort
-		}
+		queryItem := sortQuery(orderby.Field, orderby.Desc)
+		sort = append(sort, queryItem)
 	}
+	builder.sort = sort
 	builder.size = size
 	builder.from = offset
 	return nil
@@ -178,4 +178,25 @@ func simpleMapExtract(path string, object map[string]interface{}) interface{} {
 		cur = mapObj[field]
 	}
 	return cur
+}
+
+func sortQuery(path string, desc bool) map[string]interface{} {
+	sort := map[string]interface{}{}
+	if !strings.Contains(path, SpecPath) {
+		switch path {
+		case "created_at":
+			path = strings.Join([]string{CreationTimestampPath, KeywordPath}, ".")
+		default:
+			path = strings.Join([]string{path, KeywordPath}, ".")
+		}
+	} else {
+		path = strings.Join([]string{ObjectPath, path}, ".")
+	}
+
+	if desc {
+		sort[path] = map[string]interface{}{"order": "desc"}
+	} else {
+		sort[path] = map[string]interface{}{"order": "asc"}
+	}
+	return sort
 }

@@ -1,7 +1,11 @@
 package esstorage
 
 const (
+	ObjectPath            = "object"
+	SpecPath              = "spec"
 	ClusterPath           = "object.metadata.annotations.shadow.clusterpedia.io/cluster-name"
+	NameSpacePath         = "object.metadata.namespace"
+	NamePath              = "object.metadata.name"
 	OwnerReferencePath    = "object.metadata.ownerReferences.uid"
 	CreationTimestampPath = "object.metadata.creationTimestamp"
 	LabelPath             = "object.metadata.labels"
@@ -9,9 +13,5 @@ const (
 	VersionPath           = "version"
 	ResourcePath          = "resource"
 	UIDPath               = "object.metadata.uid"
-	NameSpacePath         = "namespace"
-	NamePath              = "name"
-	ApiVersionPath        = "object.apiVersion"
-	KindPath              = "object.kind"
-	ObjectMetaPath        = "object.metadata"
+	KeywordPath           = "keyword"
 )

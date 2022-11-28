@@ -34,6 +34,7 @@ type QueryBuilder struct {
 	size    int
 	from    int
 	source  []string
+	sort    []map[string]interface{}
 	boolExp BoolExpression
 }
 
@@ -60,6 +61,9 @@ func (q *QueryBuilder) build() map[string]interface{} {
 	}
 	if len(q.source) > 0 {
 		query["_source"] = q.source
+	}
+	if len(q.sort) > 0 {
+		query["sort"] = q.sort
 	}
 
 	return query
