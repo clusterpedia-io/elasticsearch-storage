@@ -14,4 +14,7 @@ const (
 	ResourcePath          = "resource"
 	UIDPath               = "object.metadata.uid"
 	KeywordPath           = "keyword"
+	ApiVersionPath        = "object.apiVersion"
+	KindPath              = "object.kind"
+	ObjectMetaPath        = "object.metadata"
 )

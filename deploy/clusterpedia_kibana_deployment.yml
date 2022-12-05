@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clusterpedia-kibana
+  namespace: clusterpedia-system
+  labels:
+    app: clusterpedia-kibana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: clusterpedia-kibana
+  template:
+    metadata:
+      labels:
+        app: clusterpedia-kibana
+    spec:
+      containers:
+        - image: docker.elastic.co/kibana/kibana:8.3.3
+          imagePullPolicy: IfNotPresent
+          name: kibana
+          ports:
+            - name: http-5601
+              containerPort: 5601
+          env:
+            - name: ELASTICSEARCH_HOSTS
+              value: '["http://clusterpedia-elasticsearchstorage:9200"]'
+      tolerations:
+        - key: "node-role.kubernetes.io/master"
+          operator: "Exists"
+          effect: "NoSchedule"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clusterpedia-kibana
+  namespace: clusterpedia-system
+spec:
+  type: NodePort
+  ports:
+    - port: 5601
+      targetPort: 5601
+      nodePort: 30601
+  selector:
+    app: clusterpedia-kibana

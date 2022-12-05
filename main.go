@@ -1,7 +1,7 @@
 package main
 
 import (
-	plugin "github.com/clusterpedia-io/es-storage-layer/storage"
+	plugin "github.com/clusterpedia-io/elasticsearch-storage/storage"
 )
 
 func init() {

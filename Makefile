@@ -1,4 +1,4 @@
-STORAGE_PLUGIN ?= es-storage-layer
+STORAGE_PLUGIN ?= elasticsearch-storage
 
 CLUSTERPEDIA_BUILDER_IMAGE = "ghcr.io/clusterpedia-io/clusterpedia/builder"
 SUPPORT_CLUSTERPEDIA_VERSIONS = ""
