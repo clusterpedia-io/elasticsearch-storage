@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/clusterpedia-io/clusterpedia/pkg/utils/feature"
 	"reflect"
 	"strconv"
 
@@ -57,7 +58,6 @@ func (s *ResourceStorage) Create(ctx context.Context, cluster string, obj runtim
 }
 
 func (s *ResourceStorage) List(ctx context.Context, listObject runtime.Object, opts *internal.ListOptions) error {
-	// TODO handle when ownerId is null
 	ownerIds, err := s.GetOwnerIds(ctx, opts)
 	if err != nil {
 		return err
@@ -301,6 +301,13 @@ func (s *ResourceStorage) upsert(ctx context.Context, cluster string, obj runtim
 					custom[path] = string(value)
 				}
 			}
+		}
+	}
+
+	if feature.FeatureGate.Enabled(AllowObjectFullTextSearch) {
+		value, err := json.Marshal(obj)
+		if err == nil {
+			custom["fullTextObject"] = string(value)
 		}
 	}
 

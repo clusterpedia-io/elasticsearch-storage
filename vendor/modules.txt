@@ -11,6 +11,7 @@ github.com/clusterpedia-io/clusterpedia/pkg/scheme
 github.com/clusterpedia-io/clusterpedia/pkg/scheme/unstructured
 github.com/clusterpedia-io/clusterpedia/pkg/storage
 github.com/clusterpedia-io/clusterpedia/pkg/storage/internalstorage
+github.com/clusterpedia-io/clusterpedia/pkg/utils/feature
 # github.com/docker/distribution v2.8.1+incompatible
 ## explicit
 github.com/docker/distribution/digestset

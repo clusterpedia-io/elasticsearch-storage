@@ -17,4 +17,5 @@ const (
 	ApiVersionPath        = "object.apiVersion"
 	KindPath              = "object.kind"
 	ObjectMetaPath        = "object.metadata"
+	FullTextObjectPath    = "custom.fullTextObject"
 )

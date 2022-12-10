@@ -18,6 +18,10 @@ import (
 	"github.com/clusterpedia-io/clusterpedia/pkg/storage/internalstorage"
 )
 
+const (
+	query = "query"
+)
+
 func applyListOptionToQueryBuilder(builder *QueryBuilder, opts *internal.ListOptions) error {
 	if opts.ClusterNames != nil {
 		queryItem := NewTerms(ClusterPath, opts.ClusterNames)
@@ -68,6 +72,15 @@ func applyListOptionToQueryBuilder(builder *QueryBuilder, opts *internal.ListOpt
 				}
 			}
 		}
+	}
+
+	if len(opts.URLQuery[query]) > 0 {
+		query := opts.URLQuery[query][0]
+		simpleQueryStringExpression := &SimpleQueryStringExpression{
+			Query:  query,
+			Fields: []string{FullTextObjectPath},
+		}
+		builder.addExpression(simpleQueryStringExpression)
 	}
 
 	if opts.EnhancedFieldSelector != nil {

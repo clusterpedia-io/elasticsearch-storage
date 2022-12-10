@@ -38,6 +38,23 @@ type QueryBuilder struct {
 	boolExp BoolExpression
 }
 
+type SimpleQueryStringExpression struct {
+	Basic
+	Query  string
+	Fields []string
+}
+
+func (q *SimpleQueryStringExpression) ToMap() map[string]interface{} {
+	m := map[string]interface{}{}
+	m["query"] = q.Query
+	if len(q.Fields) > 0 {
+		m["fields"] = q.Fields
+	}
+	return map[string]interface{}{
+		"simple_query_string": m,
+	}
+}
+
 func NewQueryBuilder() *QueryBuilder {
 	return &QueryBuilder{
 		size: -1,
@@ -65,7 +82,6 @@ func (q *QueryBuilder) build() map[string]interface{} {
 	if len(q.sort) > 0 {
 		query["sort"] = q.sort
 	}
-
 	return query
 }
 
@@ -150,6 +166,27 @@ func (t *ExistExpression) ToMap() map[string]interface{} {
 	return map[string]interface{}{
 		"exist": map[string]interface{}{
 			t.path: "",
+		},
+	}
+}
+
+type MatchExpression struct {
+	Basic
+	path  string
+	value string
+}
+
+func NewMatch(path string, value string) *MatchExpression {
+	return &MatchExpression{
+		path:  path,
+		value: value,
+	}
+}
+
+func (t *MatchExpression) ToMap() map[string]interface{} {
+	return map[string]interface{}{
+		"match": map[string]interface{}{
+			t.path: t.value,
 		},
 	}
 }
